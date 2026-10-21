@@ -204,12 +204,41 @@ La plantilla de Anchor 1.2.1 creó, entre otros, `Anchor.toml`, `Cargo.toml`, `r
 
 ### 6.2 Compilar
 
+Para compilar el programa Anchor con la configuración predeterminada:
+
 ```bash
 anchor build
-ls -lh target/deploy/
 ```
 
-El binario del programa es `target/deploy/hello_solana.so`. El archivo `hello_solana-keypair.json` en esa misma carpeta contiene una **clave privada del programa**; nunca debe publicarse.
+Sin embargo, durante el desarrollo de este proyecto encontramos que **LiteSVM 0.10.0 no pudo cargar el binario generado en sBPFv3**.
+
+Para reproducir los tests de integración con las versiones documentadas en este repositorio, utilizamos:
+
+```bash
+anchor build --arch v2
+```
+
+Comprobamos la arquitectura del binario mediante:
+
+```bash
+readelf -h target/deploy/hello_solana.so | grep Flags
+```
+
+Resultado esperado para esta compilación:
+
+```text
+Flags: 0x2
+```
+
+El programa compilado se encuentra en:
+
+```text
+target/deploy/hello_solana.so
+```
+
+**Seguridad:** el archivo `target/deploy/hello_solana-keypair.json` contiene la clave privada utilizada para el despliegue del programa. No debe publicarse ni incluirse en Git.
+
+**Importante:** la opción `--arch v2` es una solución verificada para este entorno de pruebas. No constituye una recomendación universal para proyectos nuevos. La investigación de compatibilidad con sBPFv3 se documenta en la sección 8.
 
 ### 6.3 Red local y wallet
 
@@ -358,6 +387,56 @@ cargo test --test test_initialize -- --nocapture
 
 **Importante:** la recompilación para tests no volvió a desplegar el programa. El despliegue que verificamos en Surfpool correspondía al binario anterior.
 
+### 8.3 Tests de integración completados
+
+El proyecto incluye tres tests de integración escritos en Rust y ejecutados mediante LiteSVM.
+
+| Archivo | Qué comprueba | Resultado |
+|---|---|---|
+| `test_initialize.rs` | Inicialización del contador e incremento autorizado de 0 a 1 | Aprobado |
+| `test_unauthorized.rs` | Rechazo de una wallet diferente de la autoridad, con error `Unauthorized (6000)` | Aprobado |
+| `test_overflow.rs` | Diez incrementos exitosos y rechazo del undécimo con `CounterOverflow (6001)` | Aprobado |
+
+**Preparación**
+
+Desde la raíz del repositorio:
+
+```bash
+anchor build --arch v2
+```
+
+**Ejecución**
+
+```bash
+cargo test --tests -- --nocapture
+```
+
+También podemos ejecutar cada test por separado:
+
+```bash
+cargo test --test test_initialize -- --nocapture
+cargo test --test test_unauthorized -- --nocapture
+cargo test --test test_overflow -- --nocapture
+```
+
+**Resultados observados**
+
+```text
+test test_initialize ... ok
+test test_unauthorized_increment ... ok
+test test_counter_overflow ... ok
+
+3 tests aprobados, 0 fallidos
+```
+
+En la prueba de límite, los incrementos del 1 al 10 se ejecutaron correctamente. El intento número 11 fue rechazado con `CounterOverflow (6001)` y el contador permaneció en `10`.
+
+En la prueba de autorización, una wallet diferente intentó incrementar el contador. El programa rechazó la transacción con `Unauthorized (6000)` y el contador conservó su valor y autoridad.
+
+**Nota:** estos tests utilizan LiteSVM como simulador local. No requieren Surfpool en ejecución ni acceso a una red pública de Solana. Sí requieren que el binario `target/deploy/hello_solana.so` se haya compilado previamente con la arquitectura compatible indicada.
+
+Los códigos de error se comprueban mediante su representación `Debug`; una mejora futura sería utilizar comparaciones tipadas.
+
 ## 9. Git y seguridad
 
 ```bash
@@ -401,7 +480,7 @@ El proyecto todavía **no está publicado en GitHub**.
 ## 11. Próximas mejoras
 
 - [ ] Ejecutar instrucciones `initialize` e `increment` desde un cliente y verificar el estado en Surfpool.
-- [ ] Agregar tests de autorización (`Unauthorized`) y límite (`CounterOverflow`).
+- [x] Agregar tests de autorización (`Unauthorized`) y límite (`CounterOverflow`).
 - [ ] Probar una versión reciente de LiteSVM para sBPFv3.
 - [ ] Crear scripts reproducibles de validación y documentar la IDE (VS Code + WSL).
 - [ ] Añadir capturas y notas de aprendizaje de la Week 2.
