@@ -6,3 +6,12 @@ node_modules
 test-ledger
 .yarn
 .surfpool
+
+# Local environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Solana private keypairs
+*-keypair.json
+id.json
